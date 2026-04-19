@@ -58,6 +58,7 @@ TemporaryDependencyNodeTargetIdentifier=net10.0
 
 [sourceFiles]
 Controllers/
+ AmazonController.cs
  AuthController.cs
  EbayAuthController.cs
  EbayDashboardController.cs
@@ -65,6 +66,7 @@ Controllers/
  EbayInventoryController.cs
  EbayListingController.cs
  ProductController.cs
+ SourcingController.cs
 Data/
  DbInitialiser.cs
  Migrations/
@@ -77,6 +79,7 @@ Data/
   StoreContextModelSnapshot.cs
  StoreContext.cs
 DTOs/
+ AmazonProductDto.cs
  AuthResponse.cs
  CategoryAspectDto.cs
  CategorySuggestionDto.cs
@@ -101,6 +104,7 @@ DTOs/
  ProductSearchResult.cs
  RefreshRequest.cs
  RegisterRequest.cs
+ SourcingProductDto.cs
  UserDto.cs
 Entities/
  AmazonConnection.cs
@@ -122,6 +126,7 @@ RequestHelper/
  StripContentLanguageHandler.cs
 Services/
  AmazonProductService.cs
+ AmazonScrapeService.cs
  EbayAuthService.cs
  EbayDashboardService.cs
  EbayInventoryService.cs
@@ -129,12 +134,15 @@ Services/
  EbayPolicyService.cs
  Interfaces/
   IAmazonProductService.cs
+  IAmazonScrapeService.cs
   IEbayAuthService.cs
   IEbayDashboardService.cs
   IEbayImageService.cs
   IEbayInventoryService.cs
   IEbayListingService.cs
   IEbayPolicyService.cs
+  ISourcingService.cs
+ SourcingService.cs
 
 [metadataReferences]
 ../../../../../../usr/local/share/dotnet/packs/Microsoft.AspNetCore.App.Ref/10.0.3/ref/net10.0/
@@ -448,9 +456,16 @@ Services/
  WindowsBase.dll
 <NUGET>/
  automapper/16.1.1/lib/net10.0/AutoMapper.dll
+ closedxml.parser/2.0.0/lib/netstandard2.1/ClosedXML.Parser.dll
+ closedxml/0.105.0/lib/netstandard2.1/ClosedXML.dll
+ csvhelper/33.1.0/lib/net9.0/CsvHelper.dll
+ documentformat.openxml.framework/3.1.1/lib/net8.0/DocumentFormat.OpenXml.Framework.dll
+ documentformat.openxml/3.1.1/lib/net8.0/DocumentFormat.OpenXml.dll
+ excelnumberformat/1.1.0/lib/netstandard2.0/ExcelNumberFormat.dll
  fluentvalidation.aspnetcore/11.3.0/lib/net6.0/FluentValidation.AspNetCore.dll
  fluentvalidation.dependencyinjectionextensions/11.5.1/lib/netstandard2.1/FluentValidation.DependencyInjectionExtensions.dll
  fluentvalidation/11.5.1/lib/net7.0/FluentValidation.dll
+ htmlagilitypack/1.12.4/lib/net7.0/HtmlAgilityPack.dll
  mediatr.contracts/2.0.1/lib/netstandard2.0/MediatR.Contracts.dll
  mediatr/14.1.0/lib/net10.0/MediatR.dll
  microsoft.aspnetcore.authentication.jwtbearer/10.0.5/lib/net10.0/Microsoft.AspNetCore.Authentication.JwtBearer.dll
@@ -479,10 +494,13 @@ Services/
  polly.core/8.4.2/lib/net8.0/Polly.Core.dll
  polly.extensions/8.4.2/lib/net8.0/Polly.Extensions.dll
  polly.ratelimiting/8.4.2/lib/net8.0/Polly.RateLimiting.dll
+ rbush.signed/4.0.0/lib/net8.0/RBush.dll
+ sixlabors.fonts/1.0.0/lib/netcoreapp3.1/SixLabors.Fonts.dll
  sqlitepclraw.bundle_e_sqlite3/2.1.11/lib/netstandard2.0/SQLitePCLRaw.batteries_v2.dll
  sqlitepclraw.core/2.1.11/lib/netstandard2.0/SQLitePCLRaw.core.dll
  sqlitepclraw.provider.e_sqlite3/2.1.11/lib/net6.0/SQLitePCLRaw.provider.e_sqlite3.dll
  system.identitymodel.tokens.jwt/8.0.1/lib/net9.0/System.IdentityModel.Tokens.Jwt.dll
+ system.io.packaging/8.0.1/lib/net8.0/System.IO.Packaging.dll
 
 [analyzerReferences]
 ../../../../../../usr/local/share/dotnet/packs/Microsoft.AspNetCore.App.Ref/10.0.3/analyzers/dotnet/cs/
