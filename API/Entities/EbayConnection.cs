@@ -1,0 +1,23 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace API.Entities
+{
+   public class EbayConnection
+{
+    public int Id { get; set; }
+    public string UserId { get; set; }           // FK → ApplicationUser
+    public string AccessToken { get; set; }
+    public string RefreshToken { get; set; }
+    public DateTime AccessTokenExpiresAt { get; set; }
+    public string EbayUserId { get; set; }       // eBay's internal user ID
+    public string EbayUsername { get; set; }     // e.g. "john_seller_99"
+    public bool IsActive { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+
+    public ApplicationUser User { get; set; }
+}
+}

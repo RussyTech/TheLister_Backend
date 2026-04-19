@@ -1,0 +1,47 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>14459a8c-ff77-4fe8-8067-a97fe51b1682</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+
+    <!-- ─── Auth & Identity ─────────────────────────────────────── -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.5" />
+
+    <!-- ─── Database ────────────────────────────────────────────── -->
+    <!-- SQLite: good for local dev. Swap for Npgsql in production -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
+    <!-- Uncomment below for PostgreSQL (production) -->
+    <!-- <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" /> -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+
+    <!-- ─── Architecture ────────────────────────────────────────── -->
+    <!-- AutoMapper: entity → DTO mapping -->
+    <PackageReference Include="AutoMapper" Version="16.1.1" />
+    <!-- MediatR: CQRS pattern for handlers/commands (good for scaling) -->
+    <PackageReference Include="MediatR" Version="14.1.0" />
+
+    <!-- ─── Validation ──────────────────────────────────────────── -->
+    <!-- FluentValidation: cleaner than DataAnnotations for request validation -->
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
+
+    <!-- ─── HTTP Resilience ─────────────────────────────────────── -->
+    <!-- Retry + circuit breaker for eBay/Amazon API calls -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.6.0" />
+
+    <!-- ─── Caching (Phase 2+) ──────────────────────────────────── -->
+    <!-- In-memory cache for eBay category trees, price snapshots etc. -->
+    <!-- Swap for Redis when you scale: Microsoft.Extensions.Caching.StackExchangeRedis -->
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.0" />
+
+  </ItemGroup>
+
+</Project>
