@@ -98,6 +98,7 @@ builder.Services.AddScoped<IEbayListingService, EbayListingService>();
 builder.Services.AddScoped<IEbayAuthService, EbayAuthService>();
 builder.Services.AddScoped<IEbayInventoryService, EbayInventoryService>();
 builder.Services.AddScoped<IEbayPolicyService, EbayPolicyService>();
+builder.Services.AddScoped<IEbayDashboardService, EbayDashboardService>();
 // builder.Services.AddScoped<IEbayImageService, EbayImageService>();
 
 builder.Services.AddTransient<StripContentLanguageHandler>();

@@ -28,7 +28,6 @@ public class EbayAuthService : IEbayAuthService
         ? "https://api.sandbox.ebay.com"
         : "https://api.ebay.com";
 
-    // Commerce Identity API uses apiz.ebay.com (note the 'z')
     private string IdentityApiBaseUrl => IsSandbox
         ? "https://apiz.sandbox.ebay.com"
         : "https://apiz.ebay.com";
@@ -39,6 +38,8 @@ public class EbayAuthService : IEbayAuthService
         "https://api.ebay.com/oauth/api_scope/sell.inventory",
         "https://api.ebay.com/oauth/api_scope/sell.account",
         "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
+        "https://api.ebay.com/oauth/api_scope/sell.finances",       // ← new: sales chart
+        "https://api.ebay.com/oauth/api_scope/sell.reputation",     // ← new: feedback
         "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly"
     ];
 

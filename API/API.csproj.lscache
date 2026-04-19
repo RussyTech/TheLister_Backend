@@ -60,6 +60,7 @@ TemporaryDependencyNodeTargetIdentifier=net10.0
 Controllers/
  AuthController.cs
  EbayAuthController.cs
+ EbayDashboardController.cs
  EbayImageController.cs
  EbayInventoryController.cs
  EbayListingController.cs
@@ -85,6 +86,7 @@ DTOs/
  EbayCategoryAspectDto.cs
  EbayCategoryConditionDto.cs
  EbayCategorySuggestionDto.cs
+ EbayDashboardDto.cs
  EbayInventoryResultDto.cs
  EbayListingDto.cs
  EbayPolicySetupResultDto.cs
@@ -121,12 +123,14 @@ RequestHelper/
 Services/
  AmazonProductService.cs
  EbayAuthService.cs
+ EbayDashboardService.cs
  EbayInventoryService.cs
  EbayListingService.cs
  EbayPolicyService.cs
  Interfaces/
   IAmazonProductService.cs
   IEbayAuthService.cs
+  IEbayDashboardService.cs
   IEbayImageService.cs
   IEbayInventoryService.cs
   IEbayListingService.cs
