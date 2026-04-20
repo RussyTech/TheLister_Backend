@@ -130,6 +130,7 @@ Services/
  EbayAuthService.cs
  EbayDashboardService.cs
  EbayInventoryService.cs
+ EbayItemSpecificsMapper.cs
  EbayListingService.cs
  EbayPolicyService.cs
  Interfaces/

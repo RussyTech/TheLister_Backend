@@ -307,6 +307,67 @@ public class EbayListingService : IEbayListingService
         return missing;
     }
 
+    // Add this helper method to EbayListingService:
+
+private static List<ItemSpecific> BuildItemSpecifics(List<ProductSpec> specs)
+{
+    // eBay name normalisation map — Amazon spec names → eBay aspect names
+    var nameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["brand"]                   = "Brand",
+        ["manufacturer"]            = "Brand",
+        ["model number"]            = "Model",
+        ["model"]                   = "Model",
+        ["item model number"]       = "Model",
+        ["part number"]             = "Manufacturer Part Number",
+        ["mpn"]                     = "Manufacturer Part Number",
+        ["manufacturer part number"]= "Manufacturer Part Number",
+        ["colour"]                  = "Colour",
+        ["color"]                   = "Colour",
+        ["size"]                    = "Size",
+        ["material"]                = "Material",
+        ["item weight"]             = "Item Weight",
+        ["product dimensions"]      = "Product Dimensions",
+        ["batteries required"]      = "Batteries Required",
+        ["country of origin"]       = "Country/Region of Manufacture",
+        ["ean"]                     = "EAN",
+        ["upc"]                     = "UPC",
+        ["isbn"]                    = "ISBN",
+        ["type"]                    = "Type",
+        ["sub type"]                = "Sub-Type",
+        ["theme"]                   = "Theme",
+        ["age range"]               = "Age Range (Description)",
+        ["number of pieces"]        = "Number of Pieces",
+        ["connectivity technology"] = "Connectivity",
+        ["wireless type"]           = "Wireless Technology",
+        ["operating system"]        = "Operating System",
+        ["processor"]               = "Processor",
+        ["ram"]                     = "RAM",
+        ["storage capacity"]        = "Storage Capacity",
+        ["screen size"]             = "Screen Size",
+        ["resolution"]              = "Display Resolution",
+        ["compatible devices"]      = "Compatible Model",
+    };
+
+    var result = new List<ItemSpecific>();
+    var seen   = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var spec in specs)
+    {
+        var ebayName = nameMap.TryGetValue(spec.Name, out var mapped) ? mapped : spec.Name;
+        if (seen.Add(ebayName))
+        {
+            result.Add(new ItemSpecific
+            {
+                Name  = ebayName,
+                Value = [spec.Value]
+            });
+        }
+    }
+
+    return result;
+}
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private HttpClient MakeClient()
