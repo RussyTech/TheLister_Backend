@@ -7,4 +7,5 @@ public interface IEbayAuthService
     Task<string?> GetValidAccessTokenAsync(string userId);
     Task<bool> DisconnectAsync(string userId);
     Task<bool> IsConnectedAsync(string userId);
+    Task<string?> GetEbayUsernameAsync(string userId);
 }

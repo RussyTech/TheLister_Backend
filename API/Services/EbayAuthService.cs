@@ -14,11 +14,11 @@ public class EbayAuthService : IEbayAuthService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly StoreContext _context;
 
-    private string ClientId     => _config["EbaySettings:ClientId"]!;
+    private string ClientId => _config["EbaySettings:ClientId"]!;
     private string ClientSecret => _config["EbaySettings:ClientSecret"]!;
-    private string RuName       => _config["EbaySettings:RuName"]!;
-    private string RedirectUri  => _config["EbaySettings:RedirectUri"]!;
-    private bool   IsSandbox    => _config["EbaySettings:Environment"] == "sandbox";
+    private string RuName => _config["EbaySettings:RuName"]!;
+    private string RedirectUri => _config["EbaySettings:RedirectUri"]!;
+    private bool IsSandbox => _config["EbaySettings:Environment"] == "sandbox";
 
     private string AuthBaseUrl => IsSandbox
         ? "https://auth.sandbox.ebay.com"
@@ -48,9 +48,9 @@ public class EbayAuthService : IEbayAuthService
         IHttpClientFactory httpClientFactory,
         StoreContext context)
     {
-        _config            = config;
+        _config = config;
         _httpClientFactory = httpClientFactory;
-        _context           = context;
+        _context = context;
     }
 
     public string GetAuthorizationUrl(string userId)
@@ -79,8 +79,8 @@ public class EbayAuthService : IEbayAuthService
 
         var body = new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["grant_type"]   = "authorization_code",
-            ["code"]         = code,
+            ["grant_type"] = "authorization_code",
+            ["code"] = code,
             ["redirect_uri"] = RuName
         });
 
@@ -110,9 +110,9 @@ public class EbayAuthService : IEbayAuthService
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        var accessToken      = root.GetProperty("access_token").GetString()!;
-        var refreshToken     = root.GetProperty("refresh_token").GetString()!;
-        var expiresIn        = root.GetProperty("expires_in").GetInt32();
+        var accessToken = root.GetProperty("access_token").GetString()!;
+        var refreshToken = root.GetProperty("refresh_token").GetString()!;
+        var expiresIn = root.GetProperty("expires_in").GetInt32();
         var refreshExpiresIn = root.GetProperty("refresh_token_expires_in").GetInt32();
 
         var ebayUsername = await FetchEbayUsernameAsync(accessToken);
@@ -125,22 +125,22 @@ public class EbayAuthService : IEbayAuthService
         {
             _context.EbayTokens.Add(new EbayToken
             {
-                UserId                = userId,
-                AccessToken           = accessToken,
-                RefreshToken          = refreshToken,
-                AccessTokenExpiresAt  = DateTime.UtcNow.AddSeconds(expiresIn),
+                UserId = userId,
+                AccessToken = accessToken,
+                RefreshToken = refreshToken,
+                AccessTokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn),
                 RefreshTokenExpiresAt = DateTime.UtcNow.AddSeconds(refreshExpiresIn),
-                EbayUsername          = ebayUsername,
+                EbayUsername = ebayUsername,
             });
         }
         else
         {
-            existing.AccessToken           = accessToken;
-            existing.RefreshToken          = refreshToken;
-            existing.AccessTokenExpiresAt  = DateTime.UtcNow.AddSeconds(expiresIn);
+            existing.AccessToken = accessToken;
+            existing.RefreshToken = refreshToken;
+            existing.AccessTokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
             existing.RefreshTokenExpiresAt = DateTime.UtcNow.AddSeconds(refreshExpiresIn);
-            existing.EbayUsername          = ebayUsername;
-            existing.UpdatedAt             = DateTime.UtcNow;
+            existing.EbayUsername = ebayUsername;
+            existing.UpdatedAt = DateTime.UtcNow;
         }
 
         await _context.SaveChangesAsync();
@@ -211,9 +211,9 @@ public class EbayAuthService : IEbayAuthService
 
         var body = new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["grant_type"]    = "refresh_token",
+            ["grant_type"] = "refresh_token",
             ["refresh_token"] = token.RefreshToken,
-            ["scope"]         = string.Join(" ", Scopes)
+            ["scope"] = string.Join(" ", Scopes)
         });
 
         var response = await client.PostAsync($"{ApiBaseUrl}/identity/v1/oauth2/token", body);
@@ -229,12 +229,21 @@ public class EbayAuthService : IEbayAuthService
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        token.AccessToken          = root.GetProperty("access_token").GetString()!;
+        token.AccessToken = root.GetProperty("access_token").GetString()!;
         token.AccessTokenExpiresAt = DateTime.UtcNow.AddSeconds(root.GetProperty("expires_in").GetInt32());
-        token.UpdatedAt            = DateTime.UtcNow;
+        token.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
         return token.AccessToken;
+    }
+
+    public async Task<string?> GetEbayUsernameAsync(string userId)
+    {
+        var record = await _context.EbayTokens
+            .Where(t => t.UserId == userId)
+            .Select(t => t.EbayUsername)
+            .FirstOrDefaultAsync();
+        return record;
     }
 
     public async Task<bool> DisconnectAsync(string userId)

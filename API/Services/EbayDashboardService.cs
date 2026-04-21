@@ -10,16 +10,18 @@ public class EbayDashboardService : IEbayDashboardService
     private readonly IConfiguration _config;
     private readonly IHttpClientFactory _http;
     private readonly IEbayAuthService _ebayAuth;
+    private readonly ICacheService _cache;
 
     private bool IsSandbox => _config["EbaySettings:Environment"] == "sandbox";
     private string ApiBase => IsSandbox ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
     private string Currency => _config["EbaySettings:Currency"] ?? "GBP";
 
-    public EbayDashboardService(IConfiguration config, IHttpClientFactory http, IEbayAuthService ebayAuth)
+    public EbayDashboardService(IConfiguration config, IHttpClientFactory http, IEbayAuthService ebayAuth, ICacheService cache)
     {
         _config = config;
         _http = http;
         _ebayAuth = ebayAuth;
+        _cache    = cache;
     }
 
     // ── Overview ──────────────────────────────────────────────────────────
@@ -110,73 +112,95 @@ public class EbayDashboardService : IEbayDashboardService
 
     // ── Feedback ──────────────────────────────────────────────────────────
 
-    public async Task<EbayFeedbackSummaryDto> GetFeedbackAsync(string userId, int limit = 25, int offset = 0)
+    public async Task<EbayFeedbackSummaryDto> GetFeedbackAsync(string userId, int limit = 200, int offset = 0)
     {
+        var cacheKey = $"dashboard:feedback:{userId}";
+
+        var cached = await _cache.GetAsync<EbayFeedbackSummaryDto>(cacheKey);
+        if (cached is not null)
+        {
+            Console.WriteLine($"[Feedback] Cache HIT — {cached.Recent?.Count ?? 0} entries");
+            return cached;
+        }
+
         var token = await _ebayAuth.GetValidAccessTokenAsync(userId);
         if (token is null) return new EbayFeedbackSummaryDto();
 
-        var client = MakeClient(token);
         var result = new EbayFeedbackSummaryDto();
+        var tradingUrl = IsSandbox
+            ? "https://api.sandbox.ebay.com/ws/api.dll"
+            : "https://api.ebay.com/ws/api.dll";
 
-        // ── Call 1: summary (percent, total score, last-30d counts) ──────────
+        var xml = $"""
+        <?xml version="1.0" encoding="utf-8"?>
+        <GetFeedbackRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{token}</eBayAuthToken>
+            </RequesterCredentials>
+            <FeedbackType>FeedbackReceivedAsSeller</FeedbackType>
+            <DetailLevel>ReturnAll</DetailLevel>
+            <Pagination>
+                <EntriesPerPage>200</EntriesPerPage>
+                <PageNumber>1</PageNumber>
+            </Pagination>
+        </GetFeedbackRequest>
+        """;
+
         try
         {
-            var resp = await client.GetAsync($"{ApiBase}/sell/feedback/v1/feedback_summary");
+            using var req = new HttpRequestMessage(HttpMethod.Post, tradingUrl);
+            req.Content = new StringContent(xml, System.Text.Encoding.UTF8, "text/xml");
+            req.Headers.Add("X-EBAY-API-COMPATIBILITY-LEVEL", "967");
+            req.Headers.Add("X-EBAY-API-CALL-NAME", "GetFeedback");
+            req.Headers.Add("X-EBAY-API-SITEID", "3");
+            req.Headers.Add("X-EBAY-API-APP-NAME", _config["EbaySettings:ClientId"] ?? "");
+            req.Headers.Add("X-EBAY-API-DEV-NAME", _config["EbaySettings:DevId"] ?? "");
+            req.Headers.Add("X-EBAY-API-CERT-NAME", _config["EbaySettings:ClientSecret"] ?? "");
+
+            var client = _http.CreateClient();
+            var resp = await client.SendAsync(req);
             var text = await resp.Content.ReadAsStringAsync();
-            Console.WriteLine($"[Dashboard Feedback] summary {(int)resp.StatusCode}: {text[..Math.Min(400, text.Length)]}");
 
-            if (resp.IsSuccessStatusCode)
+            if (!resp.IsSuccessStatusCode) return result;
+
+            var doc = System.Xml.Linq.XDocument.Parse(text);
+            System.Xml.Linq.XNamespace ns = "urn:ebay:apis:eBLBaseComponents";
+
+            if (int.TryParse(doc.Descendants(ns + "FeedbackScore").FirstOrDefault()?.Value, out var score))
+                result.TotalScore = score;
+
+            var summary = doc.Descendants(ns + "FeedbackSummary").FirstOrDefault();
+            if (summary is not null)
             {
-                using var doc = JsonDocument.Parse(text);
-                var root = doc.RootElement;
+                if (int.TryParse(summary.Element(ns + "UniquePositiveFeedbackCount")?.Value, out var pos)) result.PositiveLast30d = pos;
+                if (int.TryParse(summary.Element(ns + "UniqueNegativeFeedbackCount")?.Value, out var neg)) result.NegativeLast30d = neg;
+                if (int.TryParse(summary.Element(ns + "UniqueNeutralFeedbackCount")?.Value, out var neu)) result.NeutralLast30d = neu;
 
-                if (root.TryGetProperty("positiveFeedbackPercent", out var pct))
-                    result.Percent = pct.GetDouble();
-
-                if (root.TryGetProperty("feedbackLeftCount", out var score))
-                    result.TotalScore = score.GetInt32();
-
-                if (root.TryGetProperty("recentFeedbackPeriod", out var period))
-                {
-                    if (period.TryGetProperty("positiveFeedbackCount", out var pos)) result.PositiveLast30d = pos.GetInt32();
-                    if (period.TryGetProperty("neutralFeedbackCount", out var neu)) result.NeutralLast30d = neu.GetInt32();
-                    if (period.TryGetProperty("negativeFeedbackCount", out var neg)) result.NegativeLast30d = neg.GetInt32();
-                }
+                var total = result.PositiveLast30d + result.NegativeLast30d + result.NeutralLast30d;
+                result.Percent = total > 0 ? Math.Round((double)result.PositiveLast30d / total * 100, 1) : 0;
             }
-        }
-        catch (Exception ex) { Console.WriteLine($"[Dashboard Feedback] summary error: {ex.Message}"); }
 
-        // ── Call 2: paginated individual entries ──────────────────────────────
-        try
+            if (int.TryParse(doc.Descendants(ns + "TotalNumberOfEntries").FirstOrDefault()?.Value, out var totalEntries))
+                result.Total = totalEntries;
+            else
+                result.Total = result.TotalScore;
+
+            result.Recent = doc.Descendants(ns + "FeedbackDetail").Select(d => new EbayFeedbackEntryDto
+            {
+                Type = (d.Element(ns + "CommentType")?.Value ?? "").ToUpperInvariant(),
+                Comment = d.Element(ns + "CommentText")?.Value ?? "",
+                BuyerUserId = d.Element(ns + "CommentingUser")?.Value ?? "",
+                Date = DateTime.TryParse(d.Element(ns + "CommentTime")?.Value, out var dt)
+                                  ? dt.ToString("dd MMM yyyy") : "",
+            }).ToList();
+
+            Console.WriteLine($"[Feedback] Score={result.TotalScore} Entries={result.Recent.Count} — caching 30 min");
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(30));
+        }
+        catch (Exception ex)
         {
-            var resp = await client.GetAsync(
-                $"{ApiBase}/sell/feedback/v1/feedback" +
-                $"?limit={limit}&offset={offset}&feedback_type=RECEIVED_AS_SELLER");
-            var text = await resp.Content.ReadAsStringAsync();
-            Console.WriteLine($"[Dashboard Feedback] entries {(int)resp.StatusCode}: {text[..Math.Min(400, text.Length)]}");
-
-            if (resp.IsSuccessStatusCode)
-            {
-                using var doc = JsonDocument.Parse(text);
-
-                if (doc.RootElement.TryGetProperty("total", out var totalEl))
-                    result.Total = totalEl.GetInt32();
-
-                if (doc.RootElement.TryGetProperty("feedbackList", out var list))
-                {
-                    result.Recent = list.EnumerateArray().Select(f => new EbayFeedbackEntryDto
-                    {
-                        Type = f.TryGetProperty("feedbackType", out var t) ? t.GetString() ?? "" : "",
-                        Comment = f.TryGetProperty("comment", out var c) ? c.GetString() ?? "" : "",
-                        BuyerUserId = f.TryGetProperty("givingUserSeller", out var u) ? u.GetString() ?? "" : "",
-                        Date = f.TryGetProperty("creationDate", out var d) &&
-                                      DateTime.TryParse(d.GetString(), out var dt)
-                                          ? dt.ToString("dd MMM yyyy") : "",
-                    }).ToList();
-                }
-            }
+            Console.WriteLine($"[Feedback] Error: {ex.Message}");
         }
-        catch (Exception ex) { Console.WriteLine($"[Dashboard Feedback] entries error: {ex.Message}"); }
 
         return result;
     }
@@ -202,7 +226,6 @@ public class EbayDashboardService : IEbayDashboardService
             var resp = await client.GetAsync(url);
             var text = await resp.Content.ReadAsStringAsync();
             Console.WriteLine($"[Dashboard Orders] {(int)resp.StatusCode}: {text[..Math.Min(200, text.Length)]}");
-
             if (!resp.IsSuccessStatusCode) return 0;
 
             using var doc = JsonDocument.Parse(text);
@@ -221,7 +244,7 @@ public class EbayDashboardService : IEbayDashboardService
             if (resp.Headers.Date.HasValue)
             {
                 var serverTime = resp.Headers.Date.Value.UtcDateTime;
-                Console.WriteLine($"[Dashboard] eBay server time: {serverTime:O}  Machine time: {DateTime.UtcNow:O}");
+                Console.WriteLine($"[Dashboard] eBay server time: {serverTime:O}  Machine: {DateTime.UtcNow:O}");
                 return serverTime;
             }
         }
