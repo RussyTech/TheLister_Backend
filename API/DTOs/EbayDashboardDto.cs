@@ -43,4 +43,5 @@ public class EbayFeedbackSummaryDto
     public double Percent { get; set; }
     public int TotalScore { get; set; }
     public List<EbayFeedbackEntryDto> Recent { get; set; } = [];
+    public int Total { get; set; }
 }

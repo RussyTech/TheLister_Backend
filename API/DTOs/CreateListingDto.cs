@@ -20,6 +20,13 @@ public class CreateListingDto
     public string ReturnPolicyId { get; set; } = "";
     public string? MerchantLocationKey { get; set; }
     public Dictionary<string, string>? Aspects { get; set; }
+    public List<ProductSpecItem>? Specifications { get; set; }
+}
+
+public class ProductSpecItem
+{
+    public string Name { get; set; } = "";
+    public string Value { get; set; } = "";
 }
 
 public class CreateListingResultDto

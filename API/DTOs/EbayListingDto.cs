@@ -21,3 +21,4 @@ public class EbayListingDto
     public string? ListingId { get; set; }
     public string? Status { get; set; }
 }
+

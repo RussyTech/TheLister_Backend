@@ -6,5 +6,5 @@ public interface IEbayDashboardService
 {
     Task<EbayDashboardOverviewDto> GetOverviewAsync(string userId);
     Task<EbaySalesChartDto> GetSalesChartAsync(string userId, int days);
-    Task<EbayFeedbackSummaryDto> GetFeedbackAsync(string userId);
+    Task<EbayFeedbackSummaryDto> GetFeedbackAsync(string userId, int limit = 25, int offset = 0);
 }

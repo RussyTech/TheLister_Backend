@@ -10,6 +10,7 @@
   <ItemGroup>
 
     <!-- ─── Auth & Identity ─────────────────────────────────────── -->
+    <PackageReference Include="AspNetCore.HealthChecks.Redis" Version="9.0.0" />
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="CsvHelper" Version="33.1.0" />
     <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
@@ -35,6 +36,7 @@
     <!-- ─── Validation ──────────────────────────────────────────── -->
     <!-- FluentValidation: cleaner than DataAnnotations for request validation -->
     <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.6" />
 
     <!-- ─── HTTP Resilience ─────────────────────────────────────── -->
     <!-- Retry + circuit breaker for eBay/Amazon API calls -->
@@ -44,6 +46,7 @@
     <!-- In-memory cache for eBay category trees, price snapshots etc. -->
     <!-- Swap for Redis when you scale: Microsoft.Extensions.Caching.StackExchangeRedis -->
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.12.14" />
 
   </ItemGroup>
 

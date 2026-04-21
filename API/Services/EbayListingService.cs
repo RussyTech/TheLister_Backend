@@ -12,6 +12,7 @@ public class EbayListingService : IEbayListingService
     private readonly IConfiguration _config;
     private readonly IHttpClientFactory _http;
     private readonly IEbayAuthService _ebayAuth;
+    private readonly IEbayCategoryService _categoryService;
 
     private bool IsSandbox => _config["EbaySettings:Environment"] == "sandbox";
     private string ApiBase => IsSandbox ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
@@ -27,17 +28,44 @@ public class EbayListingService : IEbayListingService
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public EbayListingService(IConfiguration config, IHttpClientFactory http, IEbayAuthService ebayAuth)
+    // Preferred condition order when listing a "Like New" Amazon item on eBay.
+    // ResolveConditionAsync walks this list and picks the first one eBay accepts
+    // for the specific category — so it always succeeds regardless of category.
+    private static readonly string[] ConditionPreference =
+    [
+        "LIKE_NEW",
+        "USED_EXCELLENT",
+        "SELLER_REFURBISHED",
+        "USED_VERY_GOOD",
+        "USED_GOOD",
+        "USED_ACCEPTABLE",
+        "FOR_PARTS_OR_NOT_WORKING",
+    ];
+
+    public EbayListingService(IConfiguration config, IHttpClientFactory http,
+        IEbayAuthService ebayAuth, IEbayCategoryService categoryService)
     {
         _config = config;
         _http = http;
         _ebayAuth = ebayAuth;
+        _categoryService = categoryService;
     }
 
     public async Task<CreateListingResultDto> CreateListingAsync(string userId, CreateListingDto dto)
     {
         var token = await _ebayAuth.GetValidAccessTokenAsync(userId);
         if (token is null) return Fail("eBay account not connected");
+
+        // Auto-resolve category if not provided
+        if (string.IsNullOrWhiteSpace(dto.CategoryId))
+        {
+            dto.CategoryId = await _categoryService.SuggestCategoryIdAsync(userId, dto.Title);
+            Console.WriteLine($"[eBay] Auto-resolved category: {dto.CategoryId ?? "none"}");
+        }
+
+        // ── Resolve condition to one eBay actually accepts for this category ──
+        var condition = await ResolveConditionAsync(token, dto.CategoryId, dto.Condition);
+        Console.WriteLine($"[eBay] Condition: requested='{dto.Condition}' resolved='{condition}'");
 
         var sku = "SP-" + Guid.NewGuid().ToString("N")[..12].ToUpper();
 
@@ -47,7 +75,7 @@ public class EbayListingService : IEbayListingService
 
         var aspects = BuildAspects(dto);
 
-        var itemError = await UpsertInventoryItemAsync(token, sku, dto, aspects);
+        var itemError = await UpsertInventoryItemAsync(token, sku, dto, condition, aspects);
         if (itemError is not null) return Fail($"Inventory item: {itemError}");
 
         var (offerId, offerError) = await CreateOfferAsync(token, sku, dto, locationKey);
@@ -63,7 +91,7 @@ public class EbayListingService : IEbayListingService
             foreach (var aspect in missingAspects)
                 aspects[aspect] = ["Does Not Apply"];
 
-            var retryError = await UpsertInventoryItemAsync(token, sku, dto, aspects);
+            var retryError = await UpsertInventoryItemAsync(token, sku, dto, condition, aspects);
             if (retryError is not null) return Fail($"Inventory item retry: {retryError}");
 
             (listingId, publishError, _) = await PublishOfferAsync(token, offerId);
@@ -78,6 +106,64 @@ public class EbayListingService : IEbayListingService
             ListingId = listingId,
             EbayUrl = $"https://www.ebay.co.uk/itm/{listingId}"
         };
+    }
+
+    // ── Resolve condition: ask eBay what's valid, pick best match ─────────
+
+    private async Task<string> ResolveConditionAsync(string token, string? categoryId, string desired)
+    {
+        if (string.IsNullOrWhiteSpace(categoryId))
+        {
+            Console.WriteLine("[eBay] No categoryId — using condition as-is");
+            return desired;
+        }
+
+        try
+        {
+            var url = $"{ApiBase}/sell/metadata/v1/marketplace/{MarketId}/get_listing_conditions" +
+                       $"?filter=categoryId:{categoryId}";
+            var resp = await MakeClient().SendAsync(BuildRequest(HttpMethod.Get, url, token));
+            var text = await resp.Content.ReadAsStringAsync();
+            Console.WriteLine($"[eBay] GET listing_conditions {(int)resp.StatusCode}: {text[..Math.Min(500, text.Length)]}");
+
+            if (!resp.IsSuccessStatusCode) return desired;
+
+            // Collect all conditionIds eBay accepts for this category
+            using var doc = JsonDocument.Parse(text);
+
+            var validIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (doc.RootElement.TryGetProperty("conditionDescriptions", out var arr))
+            {
+                foreach (var item in arr.EnumerateArray())
+                    if (item.TryGetProperty("conditionId", out var cid))
+                        validIds.Add(cid.GetString() ?? "");
+            }
+
+            Console.WriteLine($"[eBay] Valid conditions for category {categoryId}: [{string.Join(", ", validIds)}]");
+
+            if (validIds.Count == 0) return desired;
+
+            // If the desired condition is already valid, use it
+            if (validIds.Contains(desired)) return desired;
+
+            // Otherwise walk the preference list and pick the first accepted value
+            foreach (var candidate in ConditionPreference)
+                if (validIds.Contains(candidate))
+                {
+                    Console.WriteLine($"[eBay] Condition '{desired}' not valid for category — falling back to '{candidate}'");
+                    return candidate;
+                }
+
+            // Last resort: just take whatever eBay said is valid
+            var fallback = validIds.First();
+            Console.WriteLine($"[eBay] No preferred condition matched — using first available: '{fallback}'");
+            return fallback;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[eBay] ResolveCondition error: {ex.Message} — using '{desired}'");
+            return desired;
+        }
     }
 
     // ── Ensure merchant location exists ───────────────────────────────────
@@ -118,8 +204,7 @@ public class EbayListingService : IEbayListingService
 
         var createResp = await MakeClient().SendAsync(
             BuildRequest(HttpMethod.Post,
-                $"{ApiBase}/sell/inventory/v1/location/{DefaultLocationKey}",
-                token, body));
+                $"{ApiBase}/sell/inventory/v1/location/{DefaultLocationKey}", token, body));
         var createText = await createResp.Content.ReadAsStringAsync();
         Console.WriteLine($"[eBay] POST location {(int)createResp.StatusCode}: {createText[..Math.Min(300, createText.Length)]}");
 
@@ -127,8 +212,7 @@ public class EbayListingService : IEbayListingService
         {
             await MakeClient().SendAsync(BuildRequest(
                 HttpMethod.Post,
-                $"{ApiBase}/sell/inventory/v1/location/{DefaultLocationKey}/enable",
-                token));
+                $"{ApiBase}/sell/inventory/v1/location/{DefaultLocationKey}/enable", token));
             Console.WriteLine($"[eBay] Created + enabled location: {DefaultLocationKey}");
             return DefaultLocationKey;
         }
@@ -149,9 +233,20 @@ public class EbayListingService : IEbayListingService
     {
         var aspects = new Dictionary<string, List<string>>
         {
-            ["Brand"] = !string.IsNullOrWhiteSpace(dto.Brand) ? [dto.Brand] : ["Does Not Apply"]
+            ["Brand"] = !string.IsNullOrWhiteSpace(dto.Brand) ? [dto.Brand] : ["Does Not Apply"],
+            ["Model"] = ["Does Not Apply"]
         };
+
         if (!string.IsNullOrWhiteSpace(dto.Mpn)) aspects["MPN"] = [dto.Mpn];
+
+        if (dto.Specifications is not null)
+        {
+            var mapped = BuildItemSpecifics(
+                dto.Specifications.Select(s => new ProductSpec { Name = s.Name, Value = s.Value }).ToList());
+            foreach (var item in mapped)
+                if (item.Value.Count > 0 && !string.IsNullOrWhiteSpace(item.Value[0]))
+                    aspects[item.Name] = item.Value;
+        }
 
         if (dto.Aspects is not null)
             foreach (var (k, v) in dto.Aspects)
@@ -165,6 +260,7 @@ public class EbayListingService : IEbayListingService
 
     private async Task<string?> UpsertInventoryItemAsync(
         string token, string sku, CreateListingDto dto,
+        string condition,
         Dictionary<string, List<string>> aspects)
     {
         var body = new
@@ -173,7 +269,7 @@ public class EbayListingService : IEbayListingService
             {
                 shipToLocationAvailability = new { quantity = dto.Quantity }
             },
-            condition = dto.Condition,
+            condition = condition,
             conditionDescription = dto.ConditionDescription,
             product = new
             {
@@ -185,8 +281,7 @@ public class EbayListingService : IEbayListingService
         };
 
         var url = $"{ApiBase}/sell/inventory/v1/inventory_item/{Uri.EscapeDataString(sku)}";
-        var request = BuildRequest(HttpMethod.Put, url, token, body);
-        var resp = await MakeClient().SendAsync(request);
+        var resp = await MakeClient().SendAsync(BuildRequest(HttpMethod.Put, url, token, body));
         var text = await resp.Content.ReadAsStringAsync();
 
         Console.WriteLine($"[eBay] PUT inventory_item {(int)resp.StatusCode}: {text[..Math.Min(400, text.Length)]}");
@@ -225,8 +320,8 @@ public class EbayListingService : IEbayListingService
             }
         };
 
-        var request = BuildRequest(HttpMethod.Post, $"{ApiBase}/sell/inventory/v1/offer", token, offerBody);
-        var resp = await MakeClient().SendAsync(request);
+        var resp = await MakeClient().SendAsync(
+            BuildRequest(HttpMethod.Post, $"{ApiBase}/sell/inventory/v1/offer", token, offerBody));
         var text = await resp.Content.ReadAsStringAsync();
 
         Console.WriteLine($"[eBay] POST offer {(int)resp.StatusCode}: {text[..Math.Min(600, text.Length)]}");
@@ -239,17 +334,14 @@ public class EbayListingService : IEbayListingService
         return (offerId, null);
     }
 
-    // ── Step 3: POST publish (with missing-aspect extraction) ─────────────
+    // ── Step 3: POST publish ──────────────────────────────────────────────
 
     private async Task<(string? listingId, string? error, List<string> missingAspects)>
         PublishOfferAsync(string token, string offerId)
     {
-        var request = BuildRequest(
+        var resp = await MakeClient().SendAsync(BuildRequest(
             HttpMethod.Post,
-            $"{ApiBase}/sell/inventory/v1/offer/{offerId}/publish",
-            token);
-
-        var resp = await MakeClient().SendAsync(request);
+            $"{ApiBase}/sell/inventory/v1/offer/{offerId}/publish", token));
         var text = await resp.Content.ReadAsStringAsync();
 
         Console.WriteLine($"[eBay] POST publish {(int)resp.StatusCode}: {text[..Math.Min(400, text.Length)]}");
@@ -265,7 +357,7 @@ public class EbayListingService : IEbayListingService
         return (listingId, null, []);
     }
 
-    // ── Parse "X is missing" errors from eBay publish response ───────────
+    // ── Extract "X is missing" aspect names from eBay error response ──────
 
     private static List<string> ExtractMissingAspects(string responseBody)
     {
@@ -276,25 +368,37 @@ public class EbayListingService : IEbayListingService
             if (!doc.RootElement.TryGetProperty("errors", out var errors)) return missing;
 
             var regex = new System.Text.RegularExpressions.Regex(
-                @"item specific (.+?) is missing",
+                @"item\s+specific\s+(.+?)\s+is\s+missing",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
             foreach (var err in errors.EnumerateArray())
             {
+                string? matched = null;
+
                 if (err.TryGetProperty("message", out var msgProp))
                 {
                     var msg = msgProp.GetString() ?? "";
-                    var match = regex.Match(msg);
-                    Console.WriteLine($"[eBay] Aspect regex on: '{msg}' → match={match.Success}");
-                    if (match.Success)
+                    var m = regex.Match(msg);
+                    if (m.Success) matched = m.Groups[1].Value.Trim();
+                    Console.WriteLine($"[eBay] Aspect check on message: '{msg}' → match={m.Success}");
+                }
+
+                if (matched is null && err.TryGetProperty("parameters", out var prms))
+                {
+                    foreach (var prm in prms.EnumerateArray())
                     {
-                        var aspect = match.Groups[1].Value.Trim();
-                        if (!missing.Contains(aspect))
+                        if (prm.TryGetProperty("value", out var val))
                         {
-                            missing.Add(aspect);
-                            Console.WriteLine($"[eBay] Found missing aspect: '{aspect}'");
+                            var m = regex.Match(val.GetString() ?? "");
+                            if (m.Success) { matched = m.Groups[1].Value.Trim(); break; }
                         }
                     }
+                }
+
+                if (matched is not null && !missing.Contains(matched))
+                {
+                    missing.Add(matched);
+                    Console.WriteLine($"[eBay] Found missing aspect: '{matched}'");
                 }
             }
         }
@@ -303,70 +407,76 @@ public class EbayListingService : IEbayListingService
             Console.WriteLine($"[eBay] ExtractMissingAspects error: {ex.Message}");
         }
 
-        Console.WriteLine($"[eBay] Missing aspects: [{string.Join(", ", missing)}]");
+        Console.WriteLine($"[eBay] Missing aspects to auto-fill: [{string.Join(", ", missing)}]");
         return missing;
     }
 
-    // Add this helper method to EbayListingService:
+    // ── Blocked Amazon specs (irrelevant on eBay) ─────────────────────────
 
-private static List<ItemSpecific> BuildItemSpecifics(List<ProductSpec> specs)
-{
-    // eBay name normalisation map — Amazon spec names → eBay aspect names
-    var nameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-    {
-        ["brand"]                   = "Brand",
-        ["manufacturer"]            = "Brand",
-        ["model number"]            = "Model",
-        ["model"]                   = "Model",
-        ["item model number"]       = "Model",
-        ["part number"]             = "Manufacturer Part Number",
-        ["mpn"]                     = "Manufacturer Part Number",
-        ["manufacturer part number"]= "Manufacturer Part Number",
-        ["colour"]                  = "Colour",
-        ["color"]                   = "Colour",
-        ["size"]                    = "Size",
-        ["material"]                = "Material",
-        ["item weight"]             = "Item Weight",
-        ["product dimensions"]      = "Product Dimensions",
-        ["batteries required"]      = "Batteries Required",
-        ["country of origin"]       = "Country/Region of Manufacture",
-        ["ean"]                     = "EAN",
-        ["upc"]                     = "UPC",
-        ["isbn"]                    = "ISBN",
-        ["type"]                    = "Type",
-        ["sub type"]                = "Sub-Type",
-        ["theme"]                   = "Theme",
-        ["age range"]               = "Age Range (Description)",
-        ["number of pieces"]        = "Number of Pieces",
-        ["connectivity technology"] = "Connectivity",
-        ["wireless type"]           = "Wireless Technology",
-        ["operating system"]        = "Operating System",
-        ["processor"]               = "Processor",
-        ["ram"]                     = "RAM",
-        ["storage capacity"]        = "Storage Capacity",
-        ["screen size"]             = "Screen Size",
-        ["resolution"]              = "Display Resolution",
-        ["compatible devices"]      = "Compatible Model",
-    };
-
-    var result = new List<ItemSpecific>();
-    var seen   = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-    foreach (var spec in specs)
-    {
-        var ebayName = nameMap.TryGetValue(spec.Name, out var mapped) ? mapped : spec.Name;
-        if (seen.Add(ebayName))
+    private static readonly HashSet<string> _blockedSpecNames =
+        new(StringComparer.OrdinalIgnoreCase)
         {
-            result.Add(new ItemSpecific
-            {
-                Name  = ebayName,
-                Value = [spec.Value]
-            });
-        }
-    }
+            "customer reviews", "best sellers rank", "best seller rank",
+            "date first available", "asin", "customer rating",
+            "ratings", "reviews", "amazon bestseller rank", "product description",
+        };
 
-    return result;
-}
+    private static List<ItemSpecific> BuildItemSpecifics(List<ProductSpec> specs)
+    {
+        var nameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["brand"] = "Brand",
+            ["manufacturer"] = "Brand",
+            ["model number"] = "Model",
+            ["model"] = "Model",
+            ["item model number"] = "Model",
+            ["part number"] = "Manufacturer Part Number",
+            ["mpn"] = "Manufacturer Part Number",
+            ["manufacturer part number"] = "Manufacturer Part Number",
+            ["colour"] = "Colour",
+            ["color"] = "Colour",
+            ["size"] = "Size",
+            ["material"] = "Material",
+            ["item weight"] = "Item Weight",
+            ["product dimensions"] = "Product Dimensions",
+            ["batteries required"] = "Batteries Required",
+            ["country of origin"] = "Country/Region of Manufacture",
+            ["ean"] = "EAN",
+            ["upc"] = "UPC",
+            ["isbn"] = "ISBN",
+            ["type"] = "Type",
+            ["sub type"] = "Sub-Type",
+            ["theme"] = "Theme",
+            ["age range"] = "Age Range (Description)",
+            ["number of pieces"] = "Number of Pieces",
+            ["connectivity technology"] = "Connectivity",
+            ["wireless type"] = "Wireless Technology",
+            ["operating system"] = "Operating System",
+            ["processor"] = "Processor",
+            ["ram"] = "RAM",
+            ["storage capacity"] = "Storage Capacity",
+            ["screen size"] = "Screen Size",
+            ["resolution"] = "Display Resolution",
+            ["compatible devices"] = "Compatible Model",
+        };
+
+        var result = new List<ItemSpecific>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var spec in specs)
+        {
+            if (_blockedSpecNames.Contains(spec.Name)) continue;
+
+            var ebayName = nameMap.TryGetValue(spec.Name, out var mapped) ? mapped : spec.Name;
+            var value = spec.Value?.Trim() ?? "";
+            if (value.Length > 65) value = value[..65].TrimEnd();
+
+            if (!string.IsNullOrWhiteSpace(value) && seen.Add(ebayName))
+                result.Add(new ItemSpecific { Name = ebayName, Value = [value] });
+        }
+
+        return result;
+    }
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -387,12 +497,10 @@ private static List<ItemSpecific> BuildItemSpecifics(List<ProductSpec> specs)
         request.VersionPolicy = HttpVersionPolicy.RequestVersionExact;
 
         if (body is not null)
-        {
             request.Content = new StringContent(
                 JsonSerializer.Serialize(body, JsonOpts),
                 Encoding.UTF8,
                 "application/json");
-        }
 
         return request;
     }

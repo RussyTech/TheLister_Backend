@@ -46,4 +46,5 @@ public class OtherSellerDto
     public string  Condition  { get; set; } = "";
     public decimal Price      { get; set; }
     public string  Currency   { get; set; } = "GBP";
+    public string? SellerUrl  { get; set; } 
 }

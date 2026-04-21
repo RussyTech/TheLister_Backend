@@ -10,15 +10,17 @@ namespace API.Services;
 public class AmazonScrapeService : IAmazonScrapeService
 {
     private readonly IHttpClientFactory _http;
+    private readonly ICacheService _cache;
     private readonly string _apiKey;
     private readonly string _baseUrl;
     private readonly string _amazonDomain;
 
-    public AmazonScrapeService(IHttpClientFactory http, IConfiguration config)
+    public AmazonScrapeService(IHttpClientFactory http, IConfiguration config, ICacheService cache)
     {
-        _http = http;
-        _apiKey = config["RainforestApi:ApiKey"] ?? "";
-        _baseUrl = config["RainforestApi:BaseUrl"] ?? "https://api.rainforestapi.com/request";
+        _http         = http;
+        _cache        = cache;
+        _apiKey       = config["RainforestApi:ApiKey"] ?? "";
+        _baseUrl      = config["RainforestApi:BaseUrl"] ?? "https://api.rainforestapi.com/request";
         _amazonDomain = config["RainforestApi:AmazonDomain"] ?? "amazon.co.uk";
     }
 
@@ -34,6 +36,14 @@ public class AmazonScrapeService : IAmazonScrapeService
         }
 
         result.Asin = asin;
+
+        // ── Cache check ───────────────────────────────────────────────────
+        var cacheKey = $"asin:{asin}";
+        var cached   = await _cache.GetAsync<AmazonProductDto>(cacheKey);
+        if (cached != null)
+            return cached;
+
+        Console.WriteLine($"[Cache MISS] {asin} — calling Rainforest");
 
         if (string.IsNullOrWhiteSpace(_apiKey))
         {
@@ -55,36 +65,45 @@ public class AmazonScrapeService : IAmazonScrapeService
 
         await Task.WhenAll(productTask, offersTask);
 
-        // ── Parse product ────────────────────────────────
+        var (productJson, productQuotaHit) = await productTask;
+        var (offersJson,  offersQuotaHit)  = await offersTask;
+
+        if (productQuotaHit)
+        {
+            result.Error     = "Rainforest API credits exhausted — please top up your account at rainforestapi.com";
+            result.ScrapedOk = false;
+            return result;
+        }
+
+        // ── Parse product ─────────────────────────────────────────────────
         try
         {
-            var productJson = await productTask;
             var parsed = JsonSerializer.Deserialize<RainforestProductResponse>(productJson, JsonOpts);
-            var p = parsed?.Product;
+            var p      = parsed?.Product;
 
             if (p != null)
             {
-                result.Title        = p.Title       ?? "";
-                result.Brand        = p.Brand       ?? "";
+                result.Title        = p.Title ?? "";
+                result.Brand        = p.Brand ?? "";
                 result.Description  = p.Description ?? "";
                 result.BulletPoints = p.FeatureBullets ?? [];
                 result.Category     = p.Categories?.FirstOrDefault()?.Name ?? "";
 
-                // ── Availability ──────────────────────────────────
+                // ── Availability ──────────────────────────────────────────
                 var availRaw = p.Availability?.Raw ?? "";
                 Console.WriteLine($"[Rainforest/availability] raw=\"{availRaw}\" type=\"{p.Availability?.Type}\"");
 
                 result.CurrentlyUnavailable =
-                    availRaw.Contains("unavailable",   StringComparison.OrdinalIgnoreCase) ||
-                    availRaw.Contains("out of stock",  StringComparison.OrdinalIgnoreCase) ||
+                    availRaw.Contains("unavailable", StringComparison.OrdinalIgnoreCase) ||
+                    availRaw.Contains("out of stock", StringComparison.OrdinalIgnoreCase) ||
                     p.Availability?.Type?.Contains("out_of_stock", StringComparison.OrdinalIgnoreCase) == true;
 
-                // ── Buy Box ───────────────────────────────────────
+                // ── Buy Box ───────────────────────────────────────────────
                 result.BuyBoxPrice = p.BuyboxWinner?.Price?.Value;
                 result.Currency    = p.BuyboxWinner?.Price?.Currency ?? "GBP";
                 Console.WriteLine($"[Rainforest/buybox] price={result.BuyBoxPrice} currency={result.Currency} unavailable={result.CurrentlyUnavailable}");
 
-                // ── Images ────────────────────────────────────────
+                // ── Images ────────────────────────────────────────────────
                 var images = new List<string>();
                 if (!string.IsNullOrWhiteSpace(p.MainImage?.Link))
                     images.Add(p.MainImage.Link);
@@ -94,7 +113,7 @@ public class AmazonScrapeService : IAmazonScrapeService
                             images.Add(img.Link);
                 result.ImageUrls = images.Take(12).ToList();
 
-                // ── Specifications ────────────────────────────────
+                // ── Specifications ────────────────────────────────────────
                 var specs = new List<ProductSpec>();
                 if (!string.IsNullOrWhiteSpace(result.Brand))
                     specs.Add(new ProductSpec { Name = "Brand", Value = result.Brand });
@@ -105,8 +124,8 @@ public class AmazonScrapeService : IAmazonScrapeService
                     {
                         if (string.IsNullOrWhiteSpace(s.Name) || string.IsNullOrWhiteSpace(s.Value))
                             continue;
-                        if (s.Name.Equals("brand",        StringComparison.OrdinalIgnoreCase) ||
-                            s.Name.Equals("manufacturer",  StringComparison.OrdinalIgnoreCase))
+                        if (s.Name.Equals("brand", StringComparison.OrdinalIgnoreCase) ||
+                            s.Name.Equals("manufacturer", StringComparison.OrdinalIgnoreCase))
                             continue;
                         specs.Add(new ProductSpec { Name = s.Name.Trim(), Value = s.Value.Trim() });
                     }
@@ -125,53 +144,55 @@ public class AmazonScrapeService : IAmazonScrapeService
             result.Error = "Failed to parse product data from Rainforest.";
         }
 
-        // ── Parse ALL used offers ────────────────────────
+        // ── Parse ALL used offers ─────────────────────────────────────────
         try
         {
-            var offersJson = await offersTask;
-            var parsed = JsonSerializer.Deserialize<RainforestOffersResponse>(offersJson, JsonOpts);
-            var offers = parsed?.Offers ?? [];
-
-            Console.WriteLine($"[Rainforest/offers] total offers returned: {offers.Count}");
-            foreach (var o in offers.Take(10))
-                Console.WriteLine($"  condition=\"{o.Condition?.Title}\" price={o.Price?.Value} seller={o.SellerName}");
-
-            if (offers.Count > 0)
+            if (!offersQuotaHit)
             {
-                // Currency from first priced offer
-                var firstPriced = offers.FirstOrDefault(o => !string.IsNullOrWhiteSpace(o.Price?.Currency));
-                if (firstPriced != null && string.IsNullOrWhiteSpace(result.Currency))
-                    result.Currency = firstPriced.Price!.Currency!;
+                var parsed = JsonSerializer.Deserialize<RainforestOffersResponse>(offersJson, JsonOpts);
+                var offers = parsed?.Offers ?? [];
 
-                // Like New
-                var likeNew = FilterByCondition(offers, "like new");
-                SetPriceRange(likeNew, out var lnMin, out var lnMax, out var lnCount);
-                result.LikeNewPriceMin = lnMin;
-                result.LikeNewPriceMax = lnMax;
-                result.LikeNewCount    = lnCount;
-                Console.WriteLine($"[Rainforest/offers] Like New: {lnCount} offers, min={lnMin}, max={lnMax}");
+                Console.WriteLine($"[Rainforest/offers] total offers returned: {offers.Count}");
+                foreach (var o in offers.Take(10))
+                    Console.WriteLine($"  condition=\"{o.Condition?.Title}\" price={o.Price?.Value} seller={o.SellerName}");
 
-                // Very Good
-                var veryGood = FilterByCondition(offers, "very good");
-                SetPriceRange(veryGood, out var vgMin, out var vgMax, out var vgCount);
-                result.VeryGoodPriceMin = vgMin;
-                result.VeryGoodPriceMax = vgMax;
-                result.VeryGoodCount    = vgCount;
-                Console.WriteLine($"[Rainforest/offers] Very Good: {vgCount} offers, min={vgMin}, max={vgMax}");
+                if (offers.Count > 0)
+                {
+                    var firstPriced = offers.FirstOrDefault(o => !string.IsNullOrWhiteSpace(o.Price?.Currency));
+                    if (firstPriced != null && string.IsNullOrWhiteSpace(result.Currency))
+                        result.Currency = firstPriced.Price!.Currency!;
 
-                // Other sellers — top 5 cheapest
-                result.OtherSellers = offers
-                    .Where(o => o.Price?.Value != null)
-                    .OrderBy(o => o.Price!.Value)
-                    .Take(5)
-                    .Select(o => new OtherSellerDto
-                    {
-                        SellerName = o.SellerName ?? "Amazon seller",
-                        Condition  = o.Condition?.Title ?? "Used",
-                        Price      = o.Price!.Value!.Value,
-                        Currency   = o.Price.Currency ?? result.Currency,
-                    })
-                    .ToList();
+                    // Like New
+                    var likeNew = FilterByCondition(offers, "like new");
+                    SetPriceRange(likeNew, out var lnMin, out var lnMax, out var lnCount);
+                    result.LikeNewPriceMin = lnMin;
+                    result.LikeNewPriceMax = lnMax;
+                    result.LikeNewCount    = lnCount;
+                    Console.WriteLine($"[Rainforest/offers] Like New: {lnCount} offers, min={lnMin}, max={lnMax}");
+
+                    // Very Good
+                    var veryGood = FilterByCondition(offers, "very good");
+                    SetPriceRange(veryGood, out var vgMin, out var vgMax, out var vgCount);
+                    result.VeryGoodPriceMin = vgMin;
+                    result.VeryGoodPriceMax = vgMax;
+                    result.VeryGoodCount    = vgCount;
+                    Console.WriteLine($"[Rainforest/offers] Very Good: {vgCount} offers, min={vgMin}, max={vgMax}");
+
+                    // Other sellers — top 5 cheapest
+                    result.OtherSellers = offers
+                        .Where(o => o.Price?.Value != null)
+                        .OrderBy(o => o.Price!.Value)
+                        .Take(5)
+                        .Select(o => new OtherSellerDto
+                        {
+                            SellerName = o.SellerName ?? "Amazon seller",
+                            Condition  = o.Condition?.Title ?? "Used",
+                            Price      = o.Price!.Value!.Value,
+                            Currency   = o.Price.Currency ?? result.Currency,
+                            SellerUrl  = o.Link ?? o.Seller?.Link,
+                        })
+                        .ToList();
+                }
             }
         }
         catch (Exception ex)
@@ -179,8 +200,14 @@ public class AmazonScrapeService : IAmazonScrapeService
             Console.WriteLine($"[Rainforest/offers ERROR] {ex.Message}");
         }
 
+        // ── Store in cache if scrape succeeded ────────────────────────────
+        if (result.ScrapedOk)
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromHours(24));
+
         return result;
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────
 
     private static List<RfOffer> FilterByCondition(List<RfOffer> offers, string keyword) =>
         offers
@@ -197,11 +224,19 @@ public class AmazonScrapeService : IAmazonScrapeService
         count = prices.Count > 0 ? prices.Count   : null;
     }
 
-    private static async Task<string> FetchJsonAsync(HttpClient client, string url)
+    private static async Task<(string json, bool quotaHit)> FetchJsonAsync(HttpClient client, string url)
     {
         Console.WriteLine($"[Rainforest] GET {url[..Math.Min(url.Length, 120)]}…");
         var response = await client.GetAsync(url);
-        return await response.Content.ReadAsStringAsync();
+        var body     = await response.Content.ReadAsStringAsync();
+
+        if ((int)response.StatusCode == 402)
+        {
+            Console.WriteLine("[Rainforest] 402 Payment Required — API credits exhausted");
+            return (body, true);
+        }
+
+        return (body, false);
     }
 
     private static string? ExtractAsin(string url)
@@ -219,9 +254,9 @@ public class AmazonScrapeService : IAmazonScrapeService
 
     private class RfProduct
     {
-        public string?  Title       { get; set; }
-        public string?  Brand       { get; set; }
-        public string?  Description { get; set; }
+        public string? Title       { get; set; }
+        public string? Brand       { get; set; }
+        public string? Description { get; set; }
 
         [JsonPropertyName("feature_bullets")]
         public List<string>? FeatureBullets { get; set; }
@@ -246,8 +281,8 @@ public class AmazonScrapeService : IAmazonScrapeService
 
     private class RfSpecification { public string? Name { get; set; } public string? Value { get; set; } }
     private class RfBuybox        { public RfPrice? Price { get; set; } }
-    private class RfImage         { public string?  Link  { get; set; } }
-    private class RfCategory      { public string?  Name  { get; set; } }
+    private class RfImage         { public string? Link { get; set; } }
+    private class RfCategory      { public string? Name { get; set; } }
 
     private class RainforestOffersResponse { public List<RfOffer>? Offers { get; set; } }
 
@@ -257,7 +292,15 @@ public class AmazonScrapeService : IAmazonScrapeService
         public RfCondition? Condition { get; set; }
 
         [JsonPropertyName("seller_name")]
-        public string? SellerName { get; set; }
+        public string?   SellerName { get; set; }
+        public string?   Link       { get; set; }
+        public RfSeller? Seller     { get; set; }
+    }
+
+    private class RfSeller
+    {
+        public string? Name { get; set; }
+        public string? Link { get; set; }
     }
 
     private class RfCondition { public string? Title { get; set; } }

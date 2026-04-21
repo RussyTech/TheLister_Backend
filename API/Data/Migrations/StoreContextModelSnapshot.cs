@@ -488,6 +488,37 @@ namespace API.Data.Migrations
                     b.ToTable("ProductImages");
                 });
 
+            modelBuilder.Entity("API.Entities.SourcingDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte[]>("FileContent")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProductCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("SourcingDocuments");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
                     b.Property<string>("Id")
@@ -517,28 +548,28 @@ namespace API.Data.Migrations
                         new
                         {
                             Id = "a1b2c3d4-0001-0000-0000-000000000001",
-                            ConcurrencyStamp = "8d9f398c-399e-4619-918e-9ce68051c633",
+                            ConcurrencyStamp = "e7d13937-cade-4bc8-aecc-8dc3c3ac54cb",
                             Name = "Admin",
                             NormalizedName = "ADMIN"
                         },
                         new
                         {
                             Id = "a1b2c3d4-0002-0000-0000-000000000002",
-                            ConcurrencyStamp = "7faadc3d-03c6-4296-9d7f-aa12d9746126",
+                            ConcurrencyStamp = "ad171c2a-3111-4dc8-8cb2-e7ae0e96eeb8",
                             Name = "Business",
                             NormalizedName = "BUSINESS"
                         },
                         new
                         {
                             Id = "a1b2c3d4-0003-0000-0000-000000000003",
-                            ConcurrencyStamp = "6c0f57cb-a720-4251-b1d4-9e3031702ab8",
+                            ConcurrencyStamp = "36226ae6-d1da-43da-a37d-eb21f74447c7",
                             Name = "Pro",
                             NormalizedName = "PRO"
                         },
                         new
                         {
                             Id = "a1b2c3d4-0004-0000-0000-000000000004",
-                            ConcurrencyStamp = "6ae7414d-0c74-4d91-9adc-59f352c76c5a",
+                            ConcurrencyStamp = "522c77c2-b389-4068-9071-8eca627ea1b1",
                             Name = "Standard",
                             NormalizedName = "STANDARD"
                         });
@@ -739,6 +770,17 @@ namespace API.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("API.Entities.SourcingDocument", b =>
+                {
+                    b.HasOne("API.Entities.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

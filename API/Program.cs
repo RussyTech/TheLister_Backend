@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,7 +32,7 @@ builder.Services.AddDbContext<StoreContext>(opt =>
 // ─── Identity ─────────────────────────────────────────────────────────────────
 builder.Services.AddIdentityCore<ApplicationUser>(opt =>
 {
-    opt.User.RequireUniqueEmail     = true;
+    opt.User.RequireUniqueEmail = true;
     opt.SignIn.RequireConfirmedEmail = false;
 })
 .AddRoles<IdentityRole>()
@@ -44,7 +45,7 @@ builder.Services
     .AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme    = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
     })
     .AddJwtBearer(options =>
     {
@@ -54,13 +55,13 @@ builder.Services
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            ValidateIssuer           = true,
-            ValidIssuer              = "syncpilot-api",
-            ValidateAudience         = true,
-            ValidAudience            = "syncpilot-client",
-            ValidateLifetime         = true,
-            ClockSkew                = TimeSpan.FromMinutes(5)
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ValidateIssuer = true,
+            ValidIssuer = "syncpilot-api",
+            ValidateAudience = true,
+            ValidAudience = "syncpilot-client",
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(5)
         };
 
         options.Events = new JwtBearerEvents
@@ -101,6 +102,8 @@ builder.Services.AddScoped<IEbayPolicyService, EbayPolicyService>();
 builder.Services.AddScoped<IEbayDashboardService, EbayDashboardService>();
 builder.Services.AddScoped<ISourcingService, SourcingService>();
 builder.Services.AddScoped<IAmazonScrapeService, AmazonScrapeService>();
+builder.Services.AddScoped<IEbaySearchService, EbaySearchService>();
+builder.Services.AddScoped<IEbayCategoryService, EbayCategoryService>();
 // builder.Services.AddScoped<IEbayImageService, EbayImageService>();
 
 builder.Services.AddTransient<StripContentLanguageHandler>();
@@ -113,6 +116,21 @@ builder.Services.AddAutoMapper(cfg =>
     // cfg.AddProfile<AnotherProfile>();
 });
 
+
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration["Redis:ConnectionString"];
+    options.InstanceName = "syncpilot:";
+});
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+    ConnectionMultiplexer.Connect(
+        builder.Configuration["Redis:ConnectionString"] ?? "localhost:6380"));
+// Cache service (wraps IDistributedCache with logging + helpers)
+builder.Services.AddScoped<ICacheService, CacheService>();
+// Health check — hit /health in browser to see Redis status
+builder.Services.AddHealthChecks()
+    .AddRedis(builder.Configuration["Redis:ConnectionString"]!);
 
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
@@ -141,6 +159,7 @@ app.UseCors(opt =>
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapHealthChecks("/health");
 
 app.MapControllers();
 

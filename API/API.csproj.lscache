@@ -60,6 +60,7 @@ TemporaryDependencyNodeTargetIdentifier=net10.0
 Controllers/
  AmazonController.cs
  AuthController.cs
+ CacheController.cs
  EbayAuthController.cs
  EbayDashboardController.cs
  EbayImageController.cs
@@ -76,6 +77,8 @@ Data/
   20260416204536_AddListingConditionAndDuration.Designer.cs
   20260417113855_AddEbayTokens.cs
   20260417113855_AddEbayTokens.Designer.cs
+  20260421072408_AddSourcingDocuments.cs
+  20260421072408_AddSourcingDocuments.Designer.cs
   StoreContextModelSnapshot.cs
  StoreContext.cs
 DTOs/
@@ -89,6 +92,7 @@ DTOs/
  EbayCategoryAspectDto.cs
  EbayCategoryConditionDto.cs
  EbayCategorySuggestionDto.cs
+ EbayCompareDto.cs
  EbayDashboardDto.cs
  EbayInventoryResultDto.cs
  EbayListingDto.cs
@@ -116,6 +120,7 @@ Entities/
  PriceComparison.cs
  ProductCache.cs
  ProductImage.cs
+ SourcingDocument.cs
 obj/Debug/net10.0/
  .NETCoreApp,Version=v10.0.AssemblyAttributes.cs
  API.AssemblyInfo.cs
@@ -127,15 +132,19 @@ RequestHelper/
 Services/
  AmazonProductService.cs
  AmazonScrapeService.cs
+ CacheService.cs
  EbayAuthService.cs
+ EbayCategoryService.cs
  EbayDashboardService.cs
  EbayInventoryService.cs
  EbayItemSpecificsMapper.cs
  EbayListingService.cs
  EbayPolicyService.cs
+ EbaySearchService.cs
  Interfaces/
   IAmazonProductService.cs
   IAmazonScrapeService.cs
+  ICacheService.cs
   IEbayAuthService.cs
   IEbayDashboardService.cs
   IEbayImageService.cs
@@ -456,6 +465,7 @@ Services/
  System.Xml.XPath.XDocument.dll
  WindowsBase.dll
 <NUGET>/
+ aspnetcore.healthchecks.redis/9.0.0/lib/net8.0/HealthChecks.Redis.dll
  automapper/16.1.1/lib/net10.0/AutoMapper.dll
  closedxml.parser/2.0.0/lib/netstandard2.1/ClosedXML.Parser.dll
  closedxml/0.105.0/lib/netstandard2.1/ClosedXML.dll
@@ -477,6 +487,7 @@ Services/
  microsoft.entityframeworkcore.sqlite.core/10.0.5/lib/net10.0/Microsoft.EntityFrameworkCore.Sqlite.dll
  microsoft.entityframeworkcore/10.0.5/lib/net10.0/Microsoft.EntityFrameworkCore.dll
  microsoft.extensions.ambientmetadata.application/9.6.0/lib/net9.0/Microsoft.Extensions.AmbientMetadata.Application.dll
+ microsoft.extensions.caching.stackexchangeredis/10.0.6/lib/net10.0/Microsoft.Extensions.Caching.StackExchangeRedis.dll
  microsoft.extensions.compliance.abstractions/9.6.0/lib/net9.0/Microsoft.Extensions.Compliance.Abstractions.dll
  microsoft.extensions.dependencyinjection.autoactivation/9.6.0/lib/net9.0/Microsoft.Extensions.DependencyInjection.AutoActivation.dll
  microsoft.extensions.dependencymodel/10.0.5/lib/net10.0/Microsoft.Extensions.DependencyModel.dll
@@ -492,6 +503,7 @@ Services/
  microsoft.identitymodel.protocols.openidconnect/8.0.1/lib/net9.0/Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
  microsoft.identitymodel.protocols/8.0.1/lib/net9.0/Microsoft.IdentityModel.Protocols.dll
  microsoft.identitymodel.tokens/8.14.0/lib/net9.0/Microsoft.IdentityModel.Tokens.dll
+ pipelines.sockets.unofficial/2.2.8/lib/net5.0/Pipelines.Sockets.Unofficial.dll
  polly.core/8.4.2/lib/net8.0/Polly.Core.dll
  polly.extensions/8.4.2/lib/net8.0/Polly.Extensions.dll
  polly.ratelimiting/8.4.2/lib/net8.0/Polly.RateLimiting.dll
@@ -500,7 +512,9 @@ Services/
  sqlitepclraw.bundle_e_sqlite3/2.1.11/lib/netstandard2.0/SQLitePCLRaw.batteries_v2.dll
  sqlitepclraw.core/2.1.11/lib/netstandard2.0/SQLitePCLRaw.core.dll
  sqlitepclraw.provider.e_sqlite3/2.1.11/lib/net6.0/SQLitePCLRaw.provider.e_sqlite3.dll
+ stackexchange.redis/2.12.14/lib/net10.0/StackExchange.Redis.dll
  system.identitymodel.tokens.jwt/8.0.1/lib/net9.0/System.IdentityModel.Tokens.Jwt.dll
+ system.io.hashing/10.0.2/lib/net10.0/System.IO.Hashing.dll
  system.io.packaging/8.0.1/lib/net8.0/System.IO.Packaging.dll
 
 [analyzerReferences]

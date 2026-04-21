@@ -24,6 +24,8 @@ public class StoreContext(DbContextOptions options) : IdentityDbContext<Applicat
     public DbSet<PriceComparison> PriceComparisons { get; set; }
     public DbSet<DealScan> DealScans { get; set; }
 
+    public DbSet<SourcingDocument> SourcingDocuments => Set<SourcingDocument>();
+
     // ─── Auto-update UpdatedAt on every save ──────────────────────────────────
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

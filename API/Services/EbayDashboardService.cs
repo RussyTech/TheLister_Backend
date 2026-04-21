@@ -7,18 +7,18 @@ namespace API.Services;
 
 public class EbayDashboardService : IEbayDashboardService
 {
-    private readonly IConfiguration     _config;
+    private readonly IConfiguration _config;
     private readonly IHttpClientFactory _http;
-    private readonly IEbayAuthService   _ebayAuth;
+    private readonly IEbayAuthService _ebayAuth;
 
-    private bool   IsSandbox => _config["EbaySettings:Environment"] == "sandbox";
-    private string ApiBase   => IsSandbox ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
-    private string Currency  => _config["EbaySettings:Currency"] ?? "GBP";
+    private bool IsSandbox => _config["EbaySettings:Environment"] == "sandbox";
+    private string ApiBase => IsSandbox ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
+    private string Currency => _config["EbaySettings:Currency"] ?? "GBP";
 
     public EbayDashboardService(IConfiguration config, IHttpClientFactory http, IEbayAuthService ebayAuth)
     {
-        _config   = config;
-        _http     = http;
+        _config = config;
+        _http = http;
         _ebayAuth = ebayAuth;
     }
 
@@ -26,16 +26,16 @@ public class EbayDashboardService : IEbayDashboardService
 
     public async Task<EbayDashboardOverviewDto> GetOverviewAsync(string userId)
     {
-        var sales    = await GetSalesChartAsync(userId, 90);
+        var sales = await GetSalesChartAsync(userId, 90);
         var feedback = await GetFeedbackAsync(userId);
 
         return new EbayDashboardOverviewDto
         {
             FeedbackPercent = feedback.Percent,
-            FeedbackScore   = feedback.TotalScore,
-            SalesLast90d    = sales.Last90Days,
-            OrdersLast90d   = await GetOrderCountAsync(userId, 90),
-            Currency        = Currency,
+            FeedbackScore = feedback.TotalScore,
+            SalesLast90d = sales.Last90Days,
+            OrdersLast90d = await GetOrderCountAsync(userId, 90),
+            Currency = Currency,
         };
     }
 
@@ -50,8 +50,8 @@ public class EbayDashboardService : IEbayDashboardService
         var nowUtc = await GetEbayServerTimeAsync(client);
 
         var from = nowUtc.AddDays(-days).ToString("yyyy-MM-ddT00:00:00.000Z");
-        var to   = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-        var url  = $"{ApiBase}/sell/fulfillment/v1/order" +
+        var to = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        var url = $"{ApiBase}/sell/fulfillment/v1/order" +
                    $"?filter=creationdate%3A%5B{Uri.EscapeDataString(from)}..{Uri.EscapeDataString(to)}%5D" +
                    $"&limit=200";
 
@@ -73,10 +73,10 @@ public class EbayDashboardService : IEbayDashboardService
                     Console.WriteLine($"[Dashboard Sales] order count: {orders.GetArrayLength()}");
                     foreach (var order in orders.EnumerateArray())
                     {
-                        if (!order.TryGetProperty("creationDate",   out var dateEl))  continue;
+                        if (!order.TryGetProperty("creationDate", out var dateEl)) continue;
                         if (!order.TryGetProperty("pricingSummary", out var pricing)) continue;
-                        if (!pricing.TryGetProperty("total",        out var total))   continue;
-                        if (!total.TryGetProperty("value",          out var val))     continue;
+                        if (!pricing.TryGetProperty("total", out var total)) continue;
+                        if (!total.TryGetProperty("value", out var val)) continue;
 
                         if (!decimal.TryParse(val.GetString(),
                                 System.Globalization.NumberStyles.Any,
@@ -99,18 +99,18 @@ public class EbayDashboardService : IEbayDashboardService
 
         return new EbaySalesChartDto
         {
-            Daily      = daily,
-            Today      = byDay.GetValueOrDefault(nowUtc.ToString("dd MMM")),
-            Last7Days  = daily.TakeLast(7).Sum(d => d.Amount),
+            Daily = daily,
+            Today = byDay.GetValueOrDefault(nowUtc.ToString("dd MMM")),
+            Last7Days = daily.TakeLast(7).Sum(d => d.Amount),
             Last31Days = daily.TakeLast(31).Sum(d => d.Amount),
             Last90Days = daily.Sum(d => d.Amount),
-            Currency   = Currency,
+            Currency = Currency,
         };
     }
 
     // ── Feedback ──────────────────────────────────────────────────────────
 
-    public async Task<EbayFeedbackSummaryDto> GetFeedbackAsync(string userId)
+    public async Task<EbayFeedbackSummaryDto> GetFeedbackAsync(string userId, int limit = 25, int offset = 0)
     {
         var token = await _ebayAuth.GetValidAccessTokenAsync(userId);
         if (token is null) return new EbayFeedbackSummaryDto();
@@ -118,6 +118,7 @@ public class EbayDashboardService : IEbayDashboardService
         var client = MakeClient(token);
         var result = new EbayFeedbackSummaryDto();
 
+        // ── Call 1: summary (percent, total score, last-30d counts) ──────────
         try
         {
             var resp = await client.GetAsync($"{ApiBase}/sell/feedback/v1/feedback_summary");
@@ -138,29 +139,37 @@ public class EbayDashboardService : IEbayDashboardService
                 if (root.TryGetProperty("recentFeedbackPeriod", out var period))
                 {
                     if (period.TryGetProperty("positiveFeedbackCount", out var pos)) result.PositiveLast30d = pos.GetInt32();
-                    if (period.TryGetProperty("neutralFeedbackCount",  out var neu)) result.NeutralLast30d  = neu.GetInt32();
+                    if (period.TryGetProperty("neutralFeedbackCount", out var neu)) result.NeutralLast30d = neu.GetInt32();
                     if (period.TryGetProperty("negativeFeedbackCount", out var neg)) result.NegativeLast30d = neg.GetInt32();
                 }
             }
         }
         catch (Exception ex) { Console.WriteLine($"[Dashboard Feedback] summary error: {ex.Message}"); }
 
+        // ── Call 2: paginated individual entries ──────────────────────────────
         try
         {
-            var resp = await client.GetAsync($"{ApiBase}/sell/feedback/v1/feedback?limit=5&feedback_type=RECEIVED_AS_SELLER");
+            var resp = await client.GetAsync(
+                $"{ApiBase}/sell/feedback/v1/feedback" +
+                $"?limit={limit}&offset={offset}&feedback_type=RECEIVED_AS_SELLER");
             var text = await resp.Content.ReadAsStringAsync();
+            Console.WriteLine($"[Dashboard Feedback] entries {(int)resp.StatusCode}: {text[..Math.Min(400, text.Length)]}");
 
             if (resp.IsSuccessStatusCode)
             {
                 using var doc = JsonDocument.Parse(text);
+
+                if (doc.RootElement.TryGetProperty("total", out var totalEl))
+                    result.Total = totalEl.GetInt32();
+
                 if (doc.RootElement.TryGetProperty("feedbackList", out var list))
                 {
                     result.Recent = list.EnumerateArray().Select(f => new EbayFeedbackEntryDto
                     {
-                        Type        = f.TryGetProperty("feedbackType",     out var t) ? t.GetString() ?? "" : "",
-                        Comment     = f.TryGetProperty("comment",          out var c) ? c.GetString() ?? "" : "",
+                        Type = f.TryGetProperty("feedbackType", out var t) ? t.GetString() ?? "" : "",
+                        Comment = f.TryGetProperty("comment", out var c) ? c.GetString() ?? "" : "",
                         BuyerUserId = f.TryGetProperty("givingUserSeller", out var u) ? u.GetString() ?? "" : "",
-                        Date        = f.TryGetProperty("creationDate",     out var d) &&
+                        Date = f.TryGetProperty("creationDate", out var d) &&
                                       DateTime.TryParse(d.GetString(), out var dt)
                                           ? dt.ToString("dd MMM yyyy") : "",
                     }).ToList();
@@ -183,8 +192,8 @@ public class EbayDashboardService : IEbayDashboardService
         var nowUtc = await GetEbayServerTimeAsync(client);
 
         var from = nowUtc.AddDays(-days).ToString("yyyy-MM-ddT00:00:00.000Z");
-        var to   = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-        var url  = $"{ApiBase}/sell/fulfillment/v1/order" +
+        var to = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        var url = $"{ApiBase}/sell/fulfillment/v1/order" +
                    $"?filter=creationdate%3A%5B{Uri.EscapeDataString(from)}..{Uri.EscapeDataString(to)}%5D" +
                    $"&limit=1";
 
@@ -229,7 +238,7 @@ public class EbayDashboardService : IEbayDashboardService
     {
         var client = _http.CreateClient();
         client.DefaultRequestVersion = new Version(1, 1);
-        client.DefaultVersionPolicy  = HttpVersionPolicy.RequestVersionExact;
+        client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", token);
         client.DefaultRequestHeaders.Add("X-EBAY-C-MARKETPLACE-ID", "EBAY_GB");

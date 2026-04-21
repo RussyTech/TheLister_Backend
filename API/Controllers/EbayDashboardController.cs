@@ -20,6 +20,8 @@ public class EbayDashboardController(IEbayDashboardService _svc) : ControllerBas
         Ok(await _svc.GetSalesChartAsync(UserId, Math.Clamp(days, 7, 90)));
 
     [HttpGet("feedback")]
-    public async Task<IActionResult> GetFeedback() =>
-        Ok(await _svc.GetFeedbackAsync(UserId));
+    public async Task<IActionResult> GetFeedback(
+    [FromQuery] int limit = 25,
+    [FromQuery] int offset = 0) =>
+    Ok(await _svc.GetFeedbackAsync(UserId, Math.Clamp(limit, 1, 200), Math.Max(0, offset)));
 }

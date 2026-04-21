@@ -1,0 +1,6 @@
+services:
+  redis-syncpilot:
+    image: redis
+    ports:
+      - "6380:6379"
+    restart: unless-stopped
