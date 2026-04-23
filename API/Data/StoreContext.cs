@@ -1,4 +1,5 @@
 using API.Entities;
+using API.Entities.DealFinder;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,7 @@ public class StoreContext(DbContextOptions options) : IdentityDbContext<Applicat
     public DbSet<DealScan> DealScans { get; set; }
 
     public DbSet<SourcingDocument> SourcingDocuments => Set<SourcingDocument>();
+    public DbSet<DealFinderDeal> DealFinderDeals { get; set; }
 
     // ─── Auto-update UpdatedAt on every save ──────────────────────────────────
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

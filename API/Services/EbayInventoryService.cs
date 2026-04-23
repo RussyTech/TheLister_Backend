@@ -7,16 +7,16 @@ namespace API.Services;
 
 public class EbayInventoryService : IEbayInventoryService
 {
-    private readonly IConfiguration     _config;
+    private readonly IConfiguration _config;
     private readonly IHttpClientFactory _http;
-    private readonly IEbayAuthService   _ebayAuth;
+    private readonly IEbayAuthService _ebayAuth;
 
-    private bool   IsSandbox     => _config["EbaySettings:Environment"] == "sandbox";
+    private bool IsSandbox => _config["EbaySettings:Environment"] == "sandbox";
     private string TradingApiUrl => IsSandbox
-        ? "https://api.sandbox.ebay.com/ws/1"
-        : "https://api.ebay.com/ws/1";
-    private string AppId  => _config["EbaySettings:ClientId"]!;
-    private string DevId  => _config["EbaySettings:DevId"]!;
+    ? "https://api.sandbox.ebay.com/ws/api.dll"
+    : "https://api.ebay.com/ws/api.dll";
+    private string AppId => _config["EbaySettings:ClientId"]!;
+    private string DevId => _config["EbaySettings:DevId"]!;
     private string CertId => _config["EbaySettings:ClientSecret"]!;
     private string SiteId => _config["EbaySettings:SiteId"] ?? "3";
 
@@ -27,8 +27,8 @@ public class EbayInventoryService : IEbayInventoryService
         IHttpClientFactory http,
         IEbayAuthService ebayAuth)
     {
-        _config   = config;
-        _http     = http;
+        _config = config;
+        _http = http;
         _ebayAuth = ebayAuth;
     }
 
@@ -38,21 +38,21 @@ public class EbayInventoryService : IEbayInventoryService
         if (token is null)
             return new EbayInventoryResultDto { Total = 0, Items = [] };
 
-        var pageNumber     = (offset / limit) + 1;
+        var pageNumber = (offset / limit) + 1;
         var entriesPerPage = Math.Min(limit, 200);
 
-        var xml    = BuildGetMyeBaySellingXml(token, entriesPerPage, pageNumber);
+        var xml = BuildGetMyeBaySellingXml(token, entriesPerPage, pageNumber);
         var client = _http.CreateClient();
 
         client.DefaultRequestHeaders.TryAddWithoutValidation("X-EBAY-API-COMPATIBILITY-LEVEL", "1155");
-        client.DefaultRequestHeaders.TryAddWithoutValidation("X-EBAY-API-DEV-NAME",  DevId);
-        client.DefaultRequestHeaders.TryAddWithoutValidation("X-EBAY-API-APP-NAME",  AppId);
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-EBAY-API-DEV-NAME", DevId);
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-EBAY-API-APP-NAME", AppId);
         client.DefaultRequestHeaders.TryAddWithoutValidation("X-EBAY-API-CERT-NAME", CertId);
         client.DefaultRequestHeaders.TryAddWithoutValidation("X-EBAY-API-CALL-NAME", "GetMyeBaySelling");
-        client.DefaultRequestHeaders.TryAddWithoutValidation("X-EBAY-API-SITEID",    SiteId);
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-EBAY-API-SITEID", SiteId);
 
         Console.WriteLine($"[eBay Trading] POST {TradingApiUrl} (GetMyeBaySelling)");
-        Console.WriteLine($"[eBay Trading] AppId={AppId[..Math.Min(8,AppId.Length)]}... DevId={DevId[..Math.Min(8,DevId.Length)]}...");
+        Console.WriteLine($"[eBay Trading] AppId={AppId[..Math.Min(8, AppId.Length)]}... DevId={DevId[..Math.Min(8, DevId.Length)]}...");
 
         var resp = await client.PostAsync(TradingApiUrl,
             new StringContent(xml, Encoding.UTF8, "text/xml"));
@@ -77,7 +77,7 @@ public class EbayInventoryService : IEbayInventoryService
                     new XElement(N("Include"), "true"),
                     new XElement(N("Pagination"),
                         new XElement(N("EntriesPerPage"), entriesPerPage),
-                        new XElement(N("PageNumber"),     pageNumber))),
+                        new XElement(N("PageNumber"), pageNumber))),
                 new XElement(N("DetailLevel"), "ReturnAll")));
 
         using var sw = new StringWriter();
@@ -114,30 +114,32 @@ public class EbayInventoryService : IEbayInventoryService
 
             var items = doc.Descendants(N("Item")).Select(item =>
             {
-                var itemId    = item.Element(N("ItemID"))?.Value ?? "";
-                var title     = item.Element(N("Title"))?.Value ?? "";
-                var priceEl   = item.Descendants(N("CurrentPrice")).FirstOrDefault();
-                var price     = decimal.TryParse(priceEl?.Value,
+                var itemId = item.Element(N("ItemID"))?.Value ?? "";
+                var title = item.Element(N("Title"))?.Value ?? "";
+                var priceEl = item.Descendants(N("CurrentPrice")).FirstOrDefault();
+                var price = decimal.TryParse(priceEl?.Value,
                                     System.Globalization.NumberStyles.Any,
                                     System.Globalization.CultureInfo.InvariantCulture, out var p) ? p : 0m;
-                var currency  = priceEl?.Attribute("currencyID")?.Value ?? "GBP";
-                var quantity  = int.TryParse(
+                var currency = priceEl?.Attribute("currencyID")?.Value ?? "GBP";
+                var quantity = int.TryParse(
                     item.Element(N("QuantityAvailable"))?.Value, out var q) ? q : 0;
-                var status    = item.Descendants(N("ListingStatus")).FirstOrDefault()?.Value ?? "Active";
+                var status = (item.Descendants(N("ListingStatus")).FirstOrDefault()?.Value ?? "Active")
+             .ToUpperInvariant();
                 var condition = item.Element(N("ConditionDisplayName"))?.Value
                              ?? MapConditionId(item.Element(N("ConditionID"))?.Value);
-                var imageUrl  = item.Descendants(N("PictureURL")).FirstOrDefault()?.Value;
+                var imageUrl = item.Descendants(N("GalleryURL")).FirstOrDefault()?.Value
+            ?? item.Descendants(N("PictureURL")).FirstOrDefault()?.Value;
 
                 return new EbayListingDto
                 {
-                    Sku       = itemId,
-                    Title     = title,
-                    Price     = price,
-                    Currency  = currency,
-                    Quantity  = quantity,
-                    Status    = status,
+                    Sku = itemId,
+                    Title = title,
+                    Price = price,
+                    Currency = currency,
+                    Quantity = quantity,
+                    Status = status,
                     Condition = condition,
-                    ImageUrl  = imageUrl,
+                    ImageUrl = imageUrl,
                 };
             }).ToList();
 
@@ -160,7 +162,7 @@ public class EbayInventoryService : IEbayInventoryService
         "4000" => "Good",
         "5000" => "Acceptable",
         "7000" => "For parts",
-        _      => "Used"
+        _ => "Used"
     };
 
     private static XName N(string local) => XName.Get(local, NS);

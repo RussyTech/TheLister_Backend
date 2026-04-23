@@ -146,6 +146,109 @@ namespace API.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("API.Entities.DealFinder.DealFinderDeal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("AmazonLikeNewPrice")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("AmazonNewPrice")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AmazonUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Asin")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("BoughtLastMonth")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Brand")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DiscoveredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("EbayAvgSoldPrice")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("EbayCurrentListingPrice")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("EbayFees")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("EbaySoldCount30Days")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ImageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("LastUpdated")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("PriceVariation90To30")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("PriceVariationPct90To30")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Profit")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Rating")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ReviewCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Roi")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SalesRank")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SalesRankDrops30")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SellerCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SellerType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("ShippingCost")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DealFinderDeals");
+                });
+
             modelBuilder.Entity("API.Entities.DealScan", b =>
                 {
                     b.Property<int>("Id")
@@ -548,28 +651,28 @@ namespace API.Data.Migrations
                         new
                         {
                             Id = "a1b2c3d4-0001-0000-0000-000000000001",
-                            ConcurrencyStamp = "e7d13937-cade-4bc8-aecc-8dc3c3ac54cb",
+                            ConcurrencyStamp = "d22e2d99-d596-49ec-8fa5-37440da8a073",
                             Name = "Admin",
                             NormalizedName = "ADMIN"
                         },
                         new
                         {
                             Id = "a1b2c3d4-0002-0000-0000-000000000002",
-                            ConcurrencyStamp = "ad171c2a-3111-4dc8-8cb2-e7ae0e96eeb8",
+                            ConcurrencyStamp = "927c2633-c311-4aa0-9527-557e281383a5",
                             Name = "Business",
                             NormalizedName = "BUSINESS"
                         },
                         new
                         {
                             Id = "a1b2c3d4-0003-0000-0000-000000000003",
-                            ConcurrencyStamp = "36226ae6-d1da-43da-a37d-eb21f74447c7",
+                            ConcurrencyStamp = "36e01485-420b-406c-a422-23a3eab0b970",
                             Name = "Pro",
                             NormalizedName = "PRO"
                         },
                         new
                         {
                             Id = "a1b2c3d4-0004-0000-0000-000000000004",
-                            ConcurrencyStamp = "522c77c2-b389-4068-9071-8eca627ea1b1",
+                            ConcurrencyStamp = "babce00a-bde3-4466-8280-320fde8d679f",
                             Name = "Standard",
                             NormalizedName = "STANDARD"
                         });

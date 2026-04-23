@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using API.Config;
 using API.Data;
 using API.Entities;
 using API.RequestHelper;
@@ -93,6 +94,9 @@ builder.Services.AddHttpClient();
 // ─── Memory Cache (for eBay category trees, price snapshots) ─────────────────
 builder.Services.AddMemoryCache();
 
+builder.Services.Configure<KeepaSettings>(builder.Configuration.GetSection("KeepaSettings"));
+builder.Services.Configure<DealScannerSettings>(builder.Configuration.GetSection("DealScannerSettings"));
+
 // ─── App Services ─────────────────────────────────────────────────────────────
 builder.Services.AddScoped<IAmazonProductService, AmazonProductService>();
 builder.Services.AddScoped<IEbayListingService, EbayListingService>();
@@ -104,7 +108,14 @@ builder.Services.AddScoped<ISourcingService, SourcingService>();
 builder.Services.AddScoped<IAmazonScrapeService, AmazonScrapeService>();
 builder.Services.AddScoped<IEbaySearchService, EbaySearchService>();
 builder.Services.AddScoped<IEbayCategoryService, EbayCategoryService>();
+builder.Services.AddHttpClient<IEbayFindingService, EbayFindingService>();
+
 // builder.Services.AddScoped<IEbayImageService, EbayImageService>();
+
+builder.Services.AddHttpClient<IKeepaService, KeepaService>();
+builder.Services.AddHttpClient<DealScannerService>();
+builder.Services.AddScoped<IDealFinderService, DealFinderService>();
+builder.Services.AddHostedService<DealScannerService>();
 
 builder.Services.AddTransient<StripContentLanguageHandler>();
 builder.Services.AddHttpClient(string.Empty)

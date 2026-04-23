@@ -57,10 +57,14 @@ TemporaryDependencyNodeTargetIdentifier=net10.0
 /warnaserror+:NU1605,SYSLIB0011
 
 [sourceFiles]
+Config/
+ KeepaSettings.cs
+ RainforestSettings.cs
 Controllers/
  AmazonController.cs
  AuthController.cs
  CacheController.cs
+ DealFinderController.cs
  EbayAuthController.cs
  EbayDashboardController.cs
  EbayImageController.cs
@@ -79,6 +83,8 @@ Data/
   20260417113855_AddEbayTokens.Designer.cs
   20260421072408_AddSourcingDocuments.cs
   20260421072408_AddSourcingDocuments.Designer.cs
+  20260423111630_AddDealFinderDeals.cs
+  20260423111630_AddDealFinderDeals.Designer.cs
   StoreContextModelSnapshot.cs
  StoreContext.cs
 DTOs/
@@ -88,6 +94,7 @@ DTOs/
  CategorySuggestionDto.cs
  CreateListingDto.cs
  CreateListingRequest.cs
+ DealFilterParams.cs
  DealScanDto.cs
  EbayCategoryAspectDto.cs
  EbayCategoryConditionDto.cs
@@ -113,6 +120,10 @@ DTOs/
 Entities/
  AmazonConnection.cs
  ApplicationUser.cs
+ DealFinder/
+  DealFinderDeal.cs
+  DealFinderFilter.cs
+  DealFinderPagedResult.cs
  DealScan.cs
  EbayConnection.cs
  EbayListing.cs
@@ -133,9 +144,12 @@ Services/
  AmazonProductService.cs
  AmazonScrapeService.cs
  CacheService.cs
+ DealFinderService.cs
+ DealScannerService.cs
  EbayAuthService.cs
  EbayCategoryService.cs
  EbayDashboardService.cs
+ EbayFindingService.cs
  EbayInventoryService.cs
  EbayItemSpecificsMapper.cs
  EbayListingService.cs
@@ -145,13 +159,17 @@ Services/
   IAmazonProductService.cs
   IAmazonScrapeService.cs
   ICacheService.cs
+  IDealFinderService.cs
   IEbayAuthService.cs
   IEbayDashboardService.cs
+  IEbayFindingService.cs
   IEbayImageService.cs
   IEbayInventoryService.cs
   IEbayListingService.cs
   IEbayPolicyService.cs
+  IKeepaService.cs
   ISourcingService.cs
+ KeepaService.cs
  SourcingService.cs
 
 [metadataReferences]
